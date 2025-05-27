@@ -18,7 +18,7 @@ export type CreateProps = {
 // atraves do generic, posso dizer que esse model que esta sendo trazido aqui na interface, extende o ModelProps
 // o modelo da dados que ser recebido para ser manipulado pelo repository sempre vai ter o id, alem de outras propriedades, que a gente não sabe quais são, mas terão
 
-export abstract class InMemoryRepository<Model extends > implements RepositoryInterface<Model, CreateProps > {
+export abstract class InMemoryRepository<Model extends ModelProps> implements RepositoryInterface<Model, CreateProps > {
 
     items: Model[] = []
     // irei definir uma propriedade que vai dizer quais campos podem ser usados para a ordenação
@@ -68,16 +68,76 @@ export abstract class InMemoryRepository<Model extends > implements RepositoryIn
     }
     
     // o sort é para a gente informar qual campo vai ser usado para ordenar o resultado
-    search(props: SearchInput): Promise<SearchOutput<Model>> {
+    async search(props: SearchInput): Promise<SearchOutput<Model>> {
         const page = props.page ?? 1
         const per_page = props.per_page ?? 15
         const sort = props.sort ?? null
         const sort_dir = props.sort_dir ?? null
         const filter = props.filter ?? null
+
+        // ele vai pegar a lista de dados q é o this.items, com filter q foi passado como parametro
+        const filteredItems = await this.applyFilter(this.items, filter)
+        // aqui vai ordenar o items filtrados
+        const orderedItems = await this.applySort(filteredItems, sort, sort_dir)
+        // aqui vai pegar os items ordenados e passar a quantidade de registros por pagina(page e per_page)
+        const paginationItems = await this.applyPaginate(orderedItems, page, per_page)
+
+        return {
+            // vai retornar os items paginados
+            items: paginationItems, 
+            // vai pegar o total de items para saber o tamanho do items filtrados
+            total: filteredItems.length,
+            // pagina atual
+            current_page: page,
+            // a quantidade registro q tem em uma pagina
+            per_page,
+            sort,
+            sort_dir,
+            filter,
+        }
     }
 
     // agora vamos definir os metodos que vão aplicar esses recursos a aplicar filtro, ordenação e paginação, onde cada funcionalidade vai esta em um metodo diferente
-    protected abstract applyFilter (items: Model[], filter: string | null): promise<Model[]>
+    protected abstract applyFilter (
+        items: Model[], 
+        filter: string | null
+    ): Promise<Model[]>
+
+    protected async applySort(
+        items: Model[],
+        sort: string | null,
+        sort_dir: string | null,
+        // vai retornar um array de model
+    ): Promise<Model[]> {
+        // se não for informado qual campo vai ser usado para ordenar para a ordenação da coleção de dados 
+        // ou o campo q foi informado não estiver dentro do array do sortableFilds, ou seja, o array que define quais campos podem ser ordenados
+        // ai não retornada
+        if (!sort || !this.sortableFields.includes(sort)) {
+            return items
+        }
+
+        // aqui eata sendo criado um arraydo zerosem estar sobescrevendo o array recebido pelo parametro 
+        return [ ... items].sort((a, b) => {
+            if (a[sort] < b[sort]) {
+                return sort_dir === 'asc' ? -1 : 1
+            }
+            if (a[sort] > b[sort]) {
+                return sort_dir === 'asc' ? 1 : -1
+            }
+            return
+        })
+    }
+
+    protected async applyPaginate(
+        items: Model[],
+        page: number,
+        per_page: number
+    ): Promise<Model[]> {
+        const start = (page - 1) * per_page
+        const limit = start * per_page
+        // vai fatiar o array pegando o primeiro até a quantidade de registros definida aqui(limit) 
+        return items.slice(start, limit)
+    }
     
     // vai precisar de um metodo q vai ser usado tanto pelo findbyid, update, delete, que é a busca da informação pelo id
     protected async _get(id: string): Promise<Model> {
