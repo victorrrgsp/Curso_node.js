@@ -134,7 +134,7 @@ export abstract class InMemoryRepository<Model extends ModelProps> implements Re
         per_page: number
     ): Promise<Model[]> {
         const start = (page - 1) * per_page
-        const limit = start * per_page
+        const limit = start + per_page
         // vai fatiar o array pegando o primeiro até a quantidade de registros definida aqui(limit) 
         return items.slice(start, limit)
     }
